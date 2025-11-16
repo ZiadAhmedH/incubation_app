@@ -1,5 +1,5 @@
 import 'package:firebase_database/firebase_database.dart';
-import 'package:incubation_app/models/data_model.dart';
+import 'package:incubation_app/data/models/data_model.dart';
 
 
 class FirebaseService {

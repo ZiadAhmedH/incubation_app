@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:incubation_app/viewModel/cubit/incubation_cubit.dart';
-import 'package:incubation_app/viewModel/cubit/incubation_state.dart';
+import 'package:incubation_app/presentation/cubit/incubation_cubit.dart';
+import 'package:incubation_app/presentation/cubit/incubation_state.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'package:intl/intl.dart';
 
-import '../models/data_model.dart';
+import '../../data/models/data_model.dart';
 
 class StageMonitoringScreen extends StatelessWidget {
   const StageMonitoringScreen({super.key});

@@ -1,6 +1,6 @@
 import 'dart:async';
-import '../../services/firebase_service.dart';
-import '../../services/semulation_service.dart';
+import '../../../data/data_sources/remote/firebase_service.dart';
+import '../../../services/semulation_service.dart';
 
 class DeviceControlService {
   final FirebaseService _fb;

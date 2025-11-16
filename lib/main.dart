@@ -1,35 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:incubation_app/firebase_options.dart';
-import 'package:incubation_app/screens/home-sceen.dart';
-import 'package:incubation_app/screens/register_screen.dart';
-import 'package:incubation_app/services/local_notification_service.dart';
-import 'package:incubation_app/services/push_notification_service.dart';
-import 'viewModel/cubit/incubation_cubit.dart';
-import 'viewModel/cubit/incubation_state.dart';
+import 'package:incubation_app/services/native_forground_service.dart';
+import 'core/di/di.dart';
+import 'firebase_options.dart';
+import 'presentation/screens/home-sceen.dart';
+import 'presentation/screens/register_screen.dart';
+import 'services/background_task_service.dart';
+import 'services/local_notification_service.dart';
+import 'services/push_notification_service.dart';
+import 'services/notification_scheduler.dart';
+import 'presentation/cubit/incubation_cubit.dart';
+import 'presentation/cubit/incubation_state.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // تهيئة Firebase (اختياري للمحاكاة)
+  // Setup GetIt Service Locator
+  await setupServiceLocator();
+
+  // Initialize Firebase
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
   } catch (e) {
     print('Firebase initialization failed: $e');
-    // استمر بدون Firebase (المحاكاة فقط)
   }
 
- await Future.wait(
-    [
+  // Initialize Services
+  try {
+    await Future.wait([
       PushNotificationService.initialize(),
       LocalNotificationService.init(),
-    ],
-  );
-
-  
+      NotificationScheduler.init(),
+      NativeForegroundService.start(),
+      // WorkmanagerService.initialize(), // ✅
+    ]);
+  } catch (e) {
+    print('Services initialization failed: $e');
+  }
 
   runApp(const MyApp());
 }
@@ -40,7 +50,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => IncubationCubit(),
+      create: (_) => getIt<IncubationCubit>(),
       child: MaterialApp(
         title: 'حضانة دودة القز',
         debugShowCheckedModeBanner: false,
@@ -62,7 +72,6 @@ class AppNavigator extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<IncubationCubit, IncubationState>(
       builder: (context, state) {
-        // حالة التحميل الأولي
         if (state is IncubationInitial) {
           return const Scaffold(
             backgroundColor: Color(0xFF1B4332),
@@ -74,12 +83,10 @@ class AppNavigator extends StatelessWidget {
           );
         }
 
-        // لا يوجد مستخدم مسجل - اذهب لشاشة التسجيل
         if (state is IncubationNoCycle) {
           return const RegistrationScreen();
         }
 
-        // المستخدم مسجل - اذهب للشاشة الرئيسية
         return const HomeScreen();
       },
     );

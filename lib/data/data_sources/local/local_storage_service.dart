@@ -1,4 +1,4 @@
-import 'package:incubation_app/models/data_model.dart';
+import 'package:incubation_app/data/models/data_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 

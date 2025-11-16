@@ -1,9 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
-
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:http/http.dart' as http;
 
 class LocalNotificationService {
   static FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -68,5 +64,28 @@ class LocalNotificationService {
         print('Notification show failed: $e2');
       }
     }
+  }
+
+  static Future<void> scheduleNotification({
+    required int id,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'feeding_channel',
+      'تذكير التغذية',
+      channelDescription: 'إشعارات تذكير تغذية دودة القز',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      sound: RawResourceAndroidNotificationSound('notification'),
+    );
+  }
+
+
+
+static  cancelAll() async {
+    await flutterLocalNotificationsPlugin.cancelAll();
   }
 }

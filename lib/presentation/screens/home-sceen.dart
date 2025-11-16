@@ -2,17 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:incubation_app/models/data_model.dart';
+import 'package:incubation_app/data/models/data_model.dart';
+import 'package:incubation_app/presentation/screens/widgets/feeding_indicator.dart';
 import 'package:incubation_app/services/semulation_service.dart';
-import 'package:incubation_app/viewModel/cubit/incubation_cubit.dart';
-import 'package:incubation_app/viewModel/cubit/incubation_state.dart';
+import 'package:incubation_app/presentation/cubit/incubation_cubit.dart';
+import 'package:incubation_app/presentation/cubit/incubation_state.dart';
 import 'package:incubation_app/widgets/debug_panel.dart';
 import 'package:incubation_app/widgets/user_info_card.dart';
 import 'package:incubation_app/widgets/cycle_info_card.dart';
 import 'package:incubation_app/widgets/sensor_data_card.dart';
 import 'package:incubation_app/widgets/charts_section.dart';
 import 'package:incubation_app/widgets/device_control_card.dart';
-import 'package:incubation_app/screens/stage_monitoring.dart';
+import 'package:incubation_app/presentation/screens/stage_monitoring.dart';
 import 'package:incubation_app/widgets/no_cycle_view.dart';
 import 'package:incubation_app/widgets/completed_view.dart';
 
@@ -126,6 +127,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   ChartsSection(sensorHistory: history),
                   const SizedBox(height: 12),
                   DeviceControlCard(sensorData: sensor),
+                  // ✅ إضافة مؤشر التغذية
+                  FeedingIndicator(
+                    currentFeeding: context
+                        .read<IncubationCubit>()
+                        .feedingSchedule
+                        .currentFeedingCount,
+                  ),
                 ],
               ),
             );

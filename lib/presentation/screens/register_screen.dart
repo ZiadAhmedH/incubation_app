@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:incubation_app/screens/home-sceen.dart';
-import 'package:incubation_app/viewModel/cubit/incubation_cubit.dart';
-import 'package:incubation_app/viewModel/cubit/incubation_state.dart';
+import 'package:incubation_app/presentation/screens/home-sceen.dart';
+import 'package:incubation_app/presentation/cubit/incubation_cubit.dart';
+import 'package:incubation_app/presentation/cubit/incubation_state.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});

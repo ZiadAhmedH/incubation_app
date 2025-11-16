@@ -1,8 +1,8 @@
 import 'dart:async';
-import '../../models/data_model.dart';
-import '../../services/semulation_service.dart';
-import '../../services/firebase_service.dart';
-import '../../services/local_storage_service.dart';
+import '../../../data/models/data_model.dart';
+import '../../../services/semulation_service.dart';
+import '../../../data/data_sources/remote/firebase_service.dart';
+import '../../../data/data_sources/local/local_storage_service.dart';
 
 /// واجهة بسيطة لفحص انتهاء المرحلة والانتقال
 class StageMonitor {

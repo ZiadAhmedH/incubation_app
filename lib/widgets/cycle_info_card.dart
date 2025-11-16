@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:incubation_app/models/data_model.dart';
+import 'package:incubation_app/data/models/data_model.dart';
 import 'package:intl/intl.dart';
 
 class CycleInfoCard extends StatelessWidget {

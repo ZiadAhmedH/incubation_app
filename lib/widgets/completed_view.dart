@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:incubation_app/models/data_model.dart';
+import 'package:incubation_app/data/models/data_model.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:incubation_app/viewModel/cubit/incubation_cubit.dart';
+import 'package:incubation_app/presentation/cubit/incubation_cubit.dart';
 
 class CompletedView extends StatelessWidget {
   final IncubationCycle cycle;

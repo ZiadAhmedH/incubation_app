@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:incubation_app/models/data_model.dart';
-import 'package:incubation_app/screens/widgets/sesor_chart.dart';
+import 'package:incubation_app/data/models/data_model.dart';
+import 'package:incubation_app/presentation/screens/widgets/sesor_chart.dart';
 
 class ChartsSection extends StatelessWidget {
   final List<SensorData> sensorHistory;
