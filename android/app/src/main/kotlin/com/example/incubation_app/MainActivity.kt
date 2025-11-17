@@ -1,46 +1,15 @@
 package com.example.incubation_app
 
+import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import android.content.Intent
-import android.os.Build
+import java.util.*
 
-class MainActivity: FlutterActivity() {
-    private val CHANNEL = "incubation_app/foreground_service"
-
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            CHANNEL
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "startService" -> {
-                    startForegroundService()
-                    result.success(true)
-                }
-                "stopService" -> {
-                    stopForegroundService()
-                    result.success(true)
-                }
-                else -> result.notImplemented()
-            }
-        }
-    }
-
-    private fun startForegroundService() {
-        val intent = Intent(this, FeedingForegroundService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-    }
-
-    private fun stopForegroundService() {
-        val intent = Intent(this, FeedingForegroundService::class.java)
-        stopService(intent)
-    }
-}
+class MainActivity: FlutterActivity() {}

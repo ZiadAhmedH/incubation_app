@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:incubation_app/services/native_forground_service.dart';
 import 'core/di/di.dart';
 import 'firebase_options.dart';
 import 'presentation/screens/home-sceen.dart';
 import 'presentation/screens/register_screen.dart';
-import 'services/background_task_service.dart';
+import 'services/oneSignal_serveice.dart';
 import 'services/local_notification_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/notification_scheduler.dart';
@@ -16,7 +15,7 @@ import 'presentation/cubit/incubation_state.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Setup GetIt Service Locator
+  // Setup GetIt
   await setupServiceLocator();
 
   // Initialize Firebase
@@ -24,21 +23,22 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    print('✅ Firebase initialized');
   } catch (e) {
-    print('Firebase initialization failed: $e');
+    print('❌ Firebase initialization failed: $e');
   }
 
   // Initialize Services
   try {
     await Future.wait([
+      OneSignalService.initialize(), // ✅
       PushNotificationService.initialize(),
       LocalNotificationService.init(),
       NotificationScheduler.init(),
-      NativeForegroundService.start(),
-      // WorkmanagerService.initialize(), // ✅
     ]);
+    print('✅ All services initialized');
   } catch (e) {
-    print('Services initialization failed: $e');
+    print('❌ Services initialization failed: $e');
   }
 
   runApp(const MyApp());

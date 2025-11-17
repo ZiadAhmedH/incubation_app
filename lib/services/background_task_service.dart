@@ -123,3 +123,90 @@
 //   final percentages = [0, 20, 35, 50, 65, 80, 0];
 //   return stageIndex < percentages.length ? percentages[stageIndex] : 0;
 // }
+
+
+
+import 'package:flutter/services.dart';
+import '../data/models/data_model.dart';
+
+class FeedingAlarmService {
+  static const MethodChannel _channel =
+      MethodChannel('incubation_app/feeding_alarms');
+
+  // الأوقات الثابتة للتغذية اليومية
+  static const List<Map<String, int>> feedingTimes = [
+    {'hour': 9, 'minute': 0},   // 9:00 صباحاً
+    {'hour': 12, 'minute': 0},  // 12:00 ظهراً
+    {'hour': 16, 'minute': 0},  // 4:00 عصراً
+    {'hour': 21, 'minute': 0},  // 9:00 مساءً
+  ];
+
+  /// جدولة جميع إشعارات التغذية اليومية
+  static Future<void> scheduleAllDailyFeedings({
+    required IncubationStage currentStage,
+  }) async {
+    final stageName = currentStage.arabicName;
+    final feedingPercent = _getFeedingPercentage(currentStage);
+
+    try {
+      for (int i = 0; i < feedingTimes.length; i++) {
+        await _channel.invokeMethod('scheduleFeeding', {
+          'hour': feedingTimes[i]['hour'],
+          'minute': feedingTimes[i]['minute'],
+          'feedingNumber': i + 1,
+          'stageName': stageName,
+          'feedingPercent': feedingPercent,
+        });
+      }
+      print('✅ تم جدولة ${feedingTimes.length} إشعارات تغذية يومية');
+    } catch (e) {
+      print('❌ خطأ في جدولة الإشعارات: $e');
+    }
+  }
+
+  /// إلغاء جميع الإشعارات المجدولة
+  static Future<void> cancelAllFeedings() async {
+    try {
+      await _channel.invokeMethod('cancelAllFeedings');
+      print('✅ تم إلغاء جميع إشعارات التغذية');
+    } catch (e) {
+      print('❌ خطأ في إلغاء الإشعارات: $e');
+    }
+  }
+
+  /// حساب نسبة التغذية حسب المرحلة
+  static int _getFeedingPercentage(IncubationStage stage) {
+    switch (stage) {
+     
+      case IncubationStage.larvaStage1:
+        return 20;
+      case IncubationStage.larvaStage2:
+        return 35;
+      case IncubationStage.larvaStage3:
+        return 50;
+      case IncubationStage.larvaStage4:
+        return 65;
+      case IncubationStage.larvaStage5:
+        return 80;
+      case IncubationStage.pupa:
+        return 0; // الشرنقة لا تحتاج تغذية
+    
+      default:
+        return 0;
+    }
+  }
+
+  /// الحصول على وصف الوقت بالعربية
+  static String getTimeDescription(int index) {
+    if (index < 0 || index >= feedingTimes.length) return '';
+    
+    final time = feedingTimes[index];
+    final hour = time['hour']!;
+    final minute = time['minute']!;
+    
+    final period = hour < 12 ? 'صباحاً' : (hour < 18 ? 'ظهراً' : 'مساءً');
+    final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+    
+    return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+  }
+}

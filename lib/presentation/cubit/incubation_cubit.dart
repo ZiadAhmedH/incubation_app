@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:incubation_app/services/background_task_service.dart';
-import 'package:incubation_app/services/native_forground_service.dart';
+import 'package:incubation_app/services/oneSignal_serveice.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/data_sources/remote/firebase_service.dart';
 import '../../data/data_sources/local/local_storage_service.dart';
@@ -22,7 +21,7 @@ import 'incubation_state.dart';
 class IncubationCubit extends Cubit<IncubationState> {
   final IncubationRepository _repository;
   final FirebaseService _firebase;
-  final LocalStorageService _localStorage; // ✅ إضافة LocalStorage
+  final LocalStorageService _localStorage;
   final SimulationService _simulation;
   final RegisterUserUseCase _registerUser;
   final StartCycleUseCase _startCycle;
@@ -30,7 +29,6 @@ class IncubationCubit extends Cubit<IncubationState> {
   final StopCycleUseCase _stopCycle;
   final UpdateDeviceControlUseCase _updateDeviceControl;
 
-  // Collaborators
   final UiTicker _uiTicker = UiTicker();
   late final StageMonitor _stageMonitor;
   late final DeviceControlService _deviceControl;
@@ -43,7 +41,7 @@ class IncubationCubit extends Cubit<IncubationState> {
   IncubationCubit(
     this._repository,
     this._firebase,
-    this._localStorage, // ✅ إضافة LocalStorage
+    this._localStorage,
     this._simulation,
     this._registerUser,
     this._startCycle,
@@ -51,16 +49,16 @@ class IncubationCubit extends Cubit<IncubationState> {
     this._stopCycle,
     this._updateDeviceControl,
   ) : super(const IncubationInitial()) {
-    _stageMonitor = StageMonitor(
-        _simulation, _firebase, _localStorage); // ✅ تمرير 3 parameters
+    _stageMonitor = StageMonitor(_simulation, _firebase, _localStorage);
     _deviceControl = DeviceControlService(_firebase, _simulation);
     _initialize();
   }
 
   void _startUiTicker() {
     _uiTicker.start(() {
-      if (state is IncubationRunning)
+      if (state is IncubationRunning) {
         emit((state as IncubationRunning).copyWith());
+      }
     });
   }
 
@@ -81,26 +79,34 @@ class IncubationCubit extends Cubit<IncubationState> {
       _userId = user.userName;
       _unitId = user.unitName;
 
+      // ✅ ربط OneSignal بالمستخدم
+      await OneSignalService.setExternalUserId(user.userName);
+
       final cycle = await _repository.getCurrentCycle(
         _userId!,
         _simulation.stageConfigs,
       );
 
       if (cycle != null && cycle.isActive) {
+        // ✅ تحديث Tags في OneSignal
+        await OneSignalService.setUserTags(
+          stage: cycle.currentStage.name,
+          dayInCycle: cycle.currentStageDaysRemaining,
+          unitId: _unitId ?? 'unknown',
+        );
+
         emit(IncubationRunning(cycle: cycle, userData: user));
         _startUiTicker();
         _startSimulation(cycle);
         _stageMonitor.start(cycle, _onStageTransition);
         _deviceControl.start(_unitId!);
 
-        // ✅ حفظ البيانات وبدء Workmanager
         await _saveCycleToPrefs(cycle);
-       // await WorkmanagerService.startPeriodicTask();
       } else {
         emit(IncubationRegistered(userData: user));
       }
     } catch (e) {
-      print('خطأ في التهيئة: $e');
+      print('❌ خطأ في التهيئة: $e');
       emit(const IncubationNoCycle());
     }
   }
@@ -111,6 +117,17 @@ class IncubationCubit extends Cubit<IncubationState> {
       _userId = name;
       _unitId = unit;
       _currentUser = user;
+
+      // ✅ ربط OneSignal بالمستخدم
+      await OneSignalService.setExternalUserId(name);
+
+      // ✅ إضافة Tags أولية
+      await OneSignalService.setUserTags(
+        stage: 'not_started',
+        dayInCycle: 0,
+        unitId: unit,
+      );
+
       emit(IncubationRegistered(userData: user));
     } catch (e) {
       emit(IncubationError(message: 'فشل التسجيل: $e'));
@@ -126,14 +143,37 @@ class IncubationCubit extends Cubit<IncubationState> {
     try {
       final cycle = await _startCycle(_currentUser!);
 
-      // ✅ تشغيل الـ Foreground Service
-      await NativeForegroundService.start();
+      // ✅ تحديث Tags في OneSignal
+      await OneSignalService.setUserTags(
+        stage: cycle.currentStage.name,
+        dayInCycle: cycle.currentStageDaysRemaining,
+        unitId: _unitId ?? 'unknown',
+      );
+
+      // ✅ إرسال إشعار بدء الدورة
+      if (_userId != null) {
+        await OneSignalService.sendNotificationToUser(
+          userId: _userId!,
+          title: '🎉 بدء دورة جديدة',
+          message: 'تم بدء دورة حضانة جديدة\n'
+              'المرحلة الأولى: ${cycle.currentStage.arabicName}',
+          data: {
+            'type': 'cycle_start',
+            'stage': cycle.currentStage.name,
+          },
+        );
+      }
+
+      // ✅ حفظ معلومات المرحلة في Firebase
+      await _saveStageInfoToFirebase(cycle);
 
       emit(IncubationRunning(cycle: cycle, userData: _currentUser!));
       _startUiTicker();
       _startSimulation(cycle);
       _stageMonitor.start(cycle, _onStageTransition);
       if (_unitId != null) _deviceControl.start(_unitId!);
+
+      await _saveCycleToPrefs(cycle);
     } catch (e) {
       emit(IncubationError(message: 'فشل بدء الدورة: $e'));
     }
@@ -144,23 +184,6 @@ class IncubationCubit extends Cubit<IncubationState> {
       currentStage: cycle.currentStage,
       onDataUpdate: _onSensorUpdate,
     );
-
-    // ✅ بدء جدول التغذية
-    _feedingSchedule.startFeedingSchedule(
-      cycle: cycle,
-      onFeedingTime: () => _onFeedingAlert(cycle),
-    );
-  }
-
-  // ✅ معالج تنبيه التغذية
-  void _onFeedingAlert(IncubationCycle cycle) {
-    print('🔔 تنبيه التغذية!');
-
-    if (state is IncubationRunning) {
-      final current = state as IncubationRunning;
-      // يمكنك إضافة حالة خاصة أو تحديث UI هنا
-      emit(current.copyWith()); // إعادة emit لتحديث UI
-    }
   }
 
   Future<void> _onSensorUpdate(SensorData data) async {
@@ -183,17 +206,40 @@ class IncubationCubit extends Cubit<IncubationState> {
     ));
   }
 
+  // ✅ إرسال إشعار عند تغيير المرحلة
   Future<void> _onStageTransition() async {
     if (state is! IncubationRunning) return;
 
     final current = state as IncubationRunning;
     if (!_stageMonitor.shouldTransition(current.cycle)) return;
 
+    final oldStage = current.cycle.currentStage; // ✅ حفظ المرحلة القديمة
+
     final updated = await _transitionStage(_userId!, current.cycle);
     if (updated == null) return;
 
-    // ✅ حفظ البيانات بعد التحديث
-    await _saveCycleToPrefs(updated);
+    // ✅ تحديث Tags عند تغيير المرحلة
+    await OneSignalService.setUserTags(
+      stage: updated.currentStage.name,
+      dayInCycle: updated.currentStageDaysRemaining,
+      unitId: _unitId ?? 'unknown',
+    );
+
+    // ✅ إرسال إشعار تغيير المرحلة
+    if (_userId != null) {
+      await OneSignalService.sendStageChangeNotification(
+        userId: _userId!,
+        oldStage: oldStage,
+        newStage: updated.currentStage,
+      );
+    }
+
+    // ✅ حفظ معلومات المرحلة الجديدة
+    await _saveStageInfoToFirebase(updated);
+
+    // ✅ إعادة تعيين عداد التغذية عند تغيير المرحلة
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('feeding_count_today', 0);
 
     if (updated.isActive) {
       emit(IncubationStageChanged(
@@ -219,18 +265,32 @@ class IncubationCubit extends Cubit<IncubationState> {
         _startUiTicker();
       }
     } else {
+      // ✅ إشعار انتهاء الدورة
+      if (_userId != null) {
+        await OneSignalService.sendNotificationToUser(
+          userId: _userId!,
+          title: '🎊 اكتملت دورة الحضانة',
+          message: 'تهانينا! اكتملت دورة حضانة دودة القز بنجاح',
+          data: {
+            'type': 'cycle_complete',
+          },
+        );
+      }
+
       emit(IncubationCompleted(cycle: updated, userData: current.userData));
       await stopCycle();
     }
   }
 
-  Future<void> updateDeviceControl(
-      {required bool fan, required bool heater}) async {
+  Future<void> updateDeviceControl({
+    required bool fan,
+    required bool heater,
+  }) async {
     if (_unitId == null) return;
     try {
       await _updateDeviceControl(_unitId!, fan, heater);
     } catch (e) {
-      print('خطأ في تحديث التحكم: $e');
+      print('❌ خطأ في تحديث التحكم: $e');
     }
   }
 
@@ -246,10 +306,36 @@ class IncubationCubit extends Cubit<IncubationState> {
     _uiTicker.stop();
     _feedingSchedule.stopFeedingSchedule();
 
-    // ✅ إيقاف الـ Foreground Service
-    await NativeForegroundService.stop();
+    // ✅ إزالة Tags من OneSignal
+    await OneSignalService.setUserTags(
+      stage: 'stopped',
+      dayInCycle: 0,
+      unitId: _unitId ?? 'unknown',
+    );
 
     emit(current.copyWith(cycle: stopped));
+  }
+
+  Future<void> _saveStageInfoToFirebase(IncubationCycle cycle) async {
+    if (_userId == null) return;
+
+    try {
+      await _firebase.saveSensorData(
+          'users/$_userId/current_stage',
+          {
+            'stage': cycle.currentStage.name,
+            'stage_arabic': cycle.currentStage.arabicName,
+            'day_in_cycle': cycle.currentStageDaysRemaining,
+            'days_remaining': cycle.currentStageDaysRemaining,
+            'feeding_percent':
+                OneSignalService.getFeedingPercentage(cycle.currentStage),
+            'updated_at': DateTime.now().toIso8601String(),
+          } as SensorData);
+
+      print('✅ تم حفظ معلومات المرحلة في Firebase');
+    } catch (e) {
+      print('❌ خطأ في حفظ معلومات المرحلة: $e');
+    }
   }
 
   // Helper methods
@@ -288,6 +374,7 @@ class IncubationCubit extends Cubit<IncubationState> {
   }
 
   UserData? get currentUser => _currentUser;
+  FeedingScheduleService get feedingSchedule => _feedingSchedule;
 
   void checkStageTransitionManually() => _onStageTransition();
 
@@ -295,9 +382,6 @@ class IncubationCubit extends Cubit<IncubationState> {
     if (state is! IncubationRunning) return;
     await _onStageTransition();
   }
-
-  // ✅ Getter للوصول لـ Feeding Schedule من UI
-  FeedingScheduleService get feedingSchedule => _feedingSchedule;
 
   Future<void> _saveCycleToPrefs(IncubationCycle cycle) async {
     final prefs = await SharedPreferences.getInstance();
@@ -308,7 +392,6 @@ class IncubationCubit extends Cubit<IncubationState> {
         'stage_start_date', cycle.stageStartDate.toIso8601String());
     await prefs.setInt('current_stage', cycle.currentStage.order);
 
-    // ✅ حفظ معلومات التغذية
     final currentDay =
         '${DateTime.now().year}-${DateTime.now().month}-${DateTime.now().day}';
     await prefs.setString('last_feeding_day', currentDay);
@@ -320,7 +403,7 @@ class IncubationCubit extends Cubit<IncubationState> {
     _uiTicker.stop();
     _stageMonitor.dispose();
     _deviceControl.dispose();
-    _feedingSchedule.dispose(); // ✅ تنظيف
+    _feedingSchedule.dispose();
     return super.close();
   }
 }

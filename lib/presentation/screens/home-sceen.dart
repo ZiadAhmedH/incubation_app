@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:incubation_app/data/models/data_model.dart';
 import 'package:incubation_app/presentation/screens/widgets/feeding_indicator.dart';
+import 'package:incubation_app/services/oneSignal_serveice.dart';
 import 'package:incubation_app/services/semulation_service.dart';
 import 'package:incubation_app/presentation/cubit/incubation_cubit.dart';
 import 'package:incubation_app/presentation/cubit/incubation_state.dart';
@@ -16,6 +17,7 @@ import 'package:incubation_app/widgets/device_control_card.dart';
 import 'package:incubation_app/presentation/screens/stage_monitoring.dart';
 import 'package:incubation_app/widgets/no_cycle_view.dart';
 import 'package:incubation_app/widgets/completed_view.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -149,6 +151,28 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         },
+      ),
+      // في مكان ما في الـ UI
+      floatingActionButton: ElevatedButton(
+        onPressed: () async {
+          final cubit = context.read<IncubationCubit>();
+          final userId = cubit.currentUser?.userName;
+
+          if (userId != null) {
+            print('🧪 اختبار إرسال إشعار لـ $userId');
+
+            await OneSignalService.sendNotificationToUser(
+              userId: userId,
+              title: '🧪 اختبار برمجي',
+              message: 'هذا إشعار تم إرساله من الكود مباشرة',
+              data: {
+                'type': 'test',
+                'test_time': DateTime.now().toIso8601String(),
+              },
+            );
+          }
+        },
+        child: const Text('اختبار إرسال إشعار'),
       ),
     );
   }
