@@ -3,6 +3,7 @@
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 ///
@@ -52,8 +53,8 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyA4eDnTR9bM24thzcvpFA_ippgImdXZXIo',
+  static final FirebaseOptions android = FirebaseOptions(
+    apiKey:  dotenv.env['FIREBASE_API_KEY']!,
     appId: '1:179179386627:android:b3d84a62d3780896cadb36',
     messagingSenderId: '179179386627',
     projectId: 'incubaation-app',

@@ -477,7 +477,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       userId: userId,
       title: '🧪 إشعار تجريبي',
       message: 'هذا إشعار تجريبي من تطبيق BombyxCare.',
-      data: {'type': 'test_notification'},
+       androidSound: 'notification',
+        
     );
 
     if (context.mounted) {

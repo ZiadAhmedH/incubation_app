@@ -18,7 +18,7 @@ class StageMonitoringScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF1B4332),
         elevation: 0,
         title: const Text(
-          'مراقبة الحضانة',
+          'متابعة النمو',
           style: TextStyle(color: Colors.white),
         ),
         leading: IconButton(

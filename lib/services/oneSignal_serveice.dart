@@ -2,11 +2,11 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../data/models/data_model.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class OneSignalService {
-  static const String appId = '6c709451-e21e-402d-9a66-f205adcfb3d8';
-  static const String restApiKey =
-      'os_v2_app_nryjiupcdzac3gtg6ic23t5t3cem6i4j2fbeqwnkpndgfpvlq4ud7kp6dv2kunwp4le2vdbo6plirufkdkyw6e55co4yagxngfp5wli';
+  static final String appId = dotenv.env['ONESIGNAL_APP_ID']!;
+  static final String restApiKey = dotenv.env['ONESIGNAL_REST_API_KEY']!;
 
   // Initialize OneSignal
   static Future<void> initialize() async {
@@ -28,7 +28,7 @@ class OneSignalService {
     required DateTime sendAt,
     Map<String, dynamic>? data,
     String androidSound =
-        'notification', // <-- default to your sound (no extension)
+        'notification.mp3', // <-- default to your sound (no extension)
     String iosSound =
         'notification.mp3', // <-- default to your sound (with extension)
   }) async {
@@ -43,7 +43,7 @@ class OneSignalService {
       'android_sound': androidSound, // <-- add this
       'ios_sound': iosSound, // <-- add this
     };
-    await http.post(
+    final response = await http.post(
       url,
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
@@ -51,6 +51,7 @@ class OneSignalService {
       },
       body: jsonEncode(body),
     );
+    print('OneSignal response: ${response.statusCode} ${response.body}');
   }
 
   static Future<void> setUserTags({
@@ -113,10 +114,8 @@ class OneSignalService {
     required String title,
     required String message,
     Map<String, dynamic>? data,
-    String androidSound =
-        'notification', // <-- default to your sound (no extension)
-    String iosSound =
-        'notification.mp3', // <-- default to your sound (with extension)
+    String androidSound = 'notification',
+    String iosSound = 'notification.mp3',
   }) async {
     final url = Uri.parse('https://onesignal.com/api/v1/notifications');
     final body = {
@@ -136,6 +135,7 @@ class OneSignalService {
       },
       body: jsonEncode(body),
     );
+    print('✅ تم إرسال إشعار إلى المستخدم: $userId');
   }
 
   static int getFeedingPercentage(IncubationStage stage) {
@@ -161,12 +161,10 @@ class OneSignalService {
     return stage.arabicName;
   }
 
-  // You can add this to your Cubit or as a helper in OneSignalService
-
   static Future<void> scheduleFullCycleFeedings({
     required String userId,
     required IncubationStage currentStage,
-    int days = 44,
+    int days = 32,
   }) async {
     final feedingPercent = OneSignalService.getFeedingPercentage(currentStage);
     final stageName = OneSignalService.getStageName(currentStage);
@@ -176,21 +174,28 @@ class OneSignalService {
       final baseTime = now.add(Duration(minutes: day));
       for (int i = 0; i < 4; i++) {
         final scheduledTime = baseTime.add(Duration(seconds: i * 15));
-        await OneSignalService.scheduleNotification(
-          userId: userId,
-          title: '🍃 وقت التغذية ${i + 1}/4',
-          message: 'اليوم ${day + 1} - المرحلة: $stageName\n'
-              'كمية التغذية: $feedingPercent%\n'
-              'تأكد من تقديم الغذاء لدودة القز الآن.',
-          sendAt: scheduledTime,
-          data: {
-            'type': 'feeding',
-            'feeding_number': i + 1,
-            'stage': currentStage.name,
-            'feeding_percent': feedingPercent,
-            'simulated_day': day + 1,
-          },
-        );
+        try {
+          await OneSignalService.scheduleNotification(
+            userId: userId,
+            title: '🍃 وقت التغذية ${i + 1}/4',
+            message: 'اليوم ${day + 1} - المرحلة: $stageName\n'
+                'كمية التغذية: $feedingPercent%\n'
+                'تأكد من تقديم الغذاء لدودة القز الآن.',
+            sendAt: scheduledTime,
+            data: {
+              'type': 'feeding',
+              'feeding_number': i + 1,
+              'stage': currentStage.name,
+              'feeding_percent': feedingPercent,
+              'simulated_day': day + 1,
+            },
+          );
+          print(
+              '✅ Scheduled feeding notification: Day ${day + 1}, Feeding ${i + 1}');
+        } catch (e) {
+          print(
+              '❌ Failed to schedule feeding notification: Day ${day + 1}, Feeding ${i + 1}, Error: $e');
+        }
       }
     }
     print('✅ تم جدولة إشعارات التغذية لـ $days يوم (دقيقة) قادمة');
@@ -206,16 +211,23 @@ class OneSignalService {
       final title = '🔄 انتقال لمرحلة جديدة';
       final message = 'بدأت المرحلة: ${stage.stage.arabicName}';
 
-      await OneSignalService.scheduleNotification(
-        userId: userId,
-        title: title,
-        message: message,
-        sendAt: baseTime,
-        data: {
-          'type': 'stage_change',
-          'stage': stage.stage.name,
-        },
-      );
+      try {
+        await OneSignalService.scheduleNotification(
+          userId: userId,
+          title: title,
+          message: message,
+          sendAt: baseTime,
+          data: {
+            'type': 'stage_change',
+            'stage': stage.stage.name,
+          },
+        );
+        print(
+            '✅ Scheduled stage transition notification: ${stage.stage.arabicName} at $baseTime');
+      } catch (e) {
+        print(
+            '❌ Failed to schedule stage transition notification: ${stage.stage.arabicName}, Error: $e');
+      }
 
       baseTime = baseTime.add(Duration(minutes: stage.durationDays));
     }

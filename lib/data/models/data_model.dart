@@ -2,7 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:incubation_app/services/semulation_service.dart';
 
 enum IncubationStage {
-  eggIncubation('فقس البيض', 0),
+  eggIncubation('حضانة البيض', 0),
   larvaStage1('يرقة - المرحلة 1', 1),
   larvaStage2('يرقة - المرحلة 2', 2),
   larvaStage3('يرقة - المرحلة 3', 3),

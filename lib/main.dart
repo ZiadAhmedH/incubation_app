@@ -10,9 +10,12 @@ import 'services/local_notification_service.dart';
 import 'services/notification_scheduler.dart';
 import 'presentation/cubit/incubation_cubit.dart';
 import 'presentation/cubit/incubation_state.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await dotenv.load(); // <-- Add this line
 
   // Setup GetIt
   await setupServiceLocator();
