@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:incubation_app/services/oneSignal_serveice.dart';
+import 'package:incubation_app/services/semulation_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/data_sources/remote/firebase_service.dart';
 import '../../data/data_sources/local/local_storage_service.dart';
@@ -12,7 +13,6 @@ import '../../domain/usecases/cycle/transition_stage_use_case.dart';
 import '../../domain/usecases/device/update_device_control.dart';
 import '../../domain/usecases/user/register_user_use_case.dart';
 import '../../services/feading_scheduale_service.dart';
-import '../../services/semulation_service.dart';
 import '../../services/ui_ticker.dart';
 import '../viewModel/services/stage_monitor.dart';
 import '../viewModel/services/device_control_service.dart';
@@ -32,11 +32,15 @@ class IncubationCubit extends Cubit<IncubationState> {
   final UiTicker _uiTicker = UiTicker();
   late final StageMonitor _stageMonitor;
   late final DeviceControlService _deviceControl;
-  final FeedingScheduleService _feedingSchedule = FeedingScheduleService();
+  final FeedingNotificationService _feedingSchedule =
+      FeedingNotificationService();
+  final FeedingNotificationService _feedingNotifications =
+      FeedingNotificationService();
 
   String? _userId;
   String? _unitId;
   UserData? _currentUser;
+  StreamSubscription<SensorData>? _sensorSubscription;
 
   IncubationCubit(
     this._repository,
@@ -151,27 +155,24 @@ class IncubationCubit extends Cubit<IncubationState> {
       );
 
       // ✅ إرسال إشعار بدء الدورة
-      if (_userId != null) {
-        await OneSignalService.sendNotificationToUser(
-          userId: _userId!,
-          title: '🎉 بدء دورة جديدة',
-          message: 'تم بدء دورة حضانة جديدة\n'
-              'المرحلة الأولى: ${cycle.currentStage.arabicName}',
-          data: {
-            'type': 'cycle_start',
-            'stage': cycle.currentStage.name,
-          },
-        );
-      }
-
-      // ✅ حفظ معلومات المرحلة في Firebase
-      await _saveStageInfoToFirebase(cycle);
+      await OneSignalService.scheduleAllStageTransitionNotifications(
+        userId: _userId!,
+        stages: cycle.stages,
+        cycleStart: DateTime.now(),
+      );
 
       emit(IncubationRunning(cycle: cycle, userData: _currentUser!));
       _startUiTicker();
       _startSimulation(cycle);
       _stageMonitor.start(cycle, _onStageTransition);
       if (_unitId != null) _deviceControl.start(_unitId!);
+
+      // ✅ Schedule all feeding notifications for the first stage
+      await OneSignalService.scheduleFullCycleFeedings(
+        userId: _userId!,
+        currentStage: cycle.currentStage,
+        days: 32,
+      );
 
       await _saveCycleToPrefs(cycle);
     } catch (e) {
@@ -180,7 +181,9 @@ class IncubationCubit extends Cubit<IncubationState> {
   }
 
   void _startSimulation(IncubationCycle cycle) {
+    // Start ESP32 simulator and stream from Firebase
     _simulation.startSimulation(
+      unitId: _unitId ?? 'unit_default',
       currentStage: cycle.currentStage,
       onDataUpdate: _onSensorUpdate,
     );
@@ -193,11 +196,9 @@ class IncubationCubit extends Cubit<IncubationState> {
     final history = List<SensorData>.from(current.sensorHistory)..add(data);
     if (history.length > 100) history.removeAt(0);
 
-    if (_unitId != null) {
-      await _repository.saveSensorData(_unitId!, data);
-      if (history.length % 50 == 0) {
-        await _repository.cleanOldReadings(_unitId!);
-      }
+    // Clean old readings periodically
+    if (_unitId != null && history.length % 50 == 0) {
+      await _repository.cleanOldReadings(_unitId!);
     }
 
     emit(current.copyWith(
@@ -213,7 +214,7 @@ class IncubationCubit extends Cubit<IncubationState> {
     final current = state as IncubationRunning;
     if (!_stageMonitor.shouldTransition(current.cycle)) return;
 
-    final oldStage = current.cycle.currentStage; // ✅ حفظ المرحلة القديمة
+    final oldStage = current.cycle.currentStage;
 
     final updated = await _transitionStage(_userId!, current.cycle);
     if (updated == null) return;
@@ -225,17 +226,20 @@ class IncubationCubit extends Cubit<IncubationState> {
       unitId: _unitId ?? 'unknown',
     );
 
-    // ✅ إرسال إشعار تغيير المرحلة
-    if (_userId != null) {
-      await OneSignalService.sendStageChangeNotification(
-        userId: _userId!,
-        oldStage: oldStage,
-        newStage: updated.currentStage,
-      );
-    }
+    // ✅ إرسال إشعار تغيير المرحلة (فوري)
+    await OneSignalService.sendStageChangeNotification(
+      userId: _userId!,
+      oldStage: oldStage,
+      newStage: updated.currentStage,
+      // Optionally, add sendAt if you want to schedule for the future
+    );
 
-    // ✅ حفظ معلومات المرحلة الجديدة
-    await _saveStageInfoToFirebase(updated);
+    // Get the number of days/minutes for the new stage
+    final stageConfig = updated.stages.firstWhere(
+      (s) => s.stage == updated.currentStage,
+      orElse: () => updated.stages.first,
+    );
+    final stageDays = stageConfig.durationDays;
 
     // ✅ إعادة تعيين عداد التغذية عند تغيير المرحلة
     final prefs = await SharedPreferences.getInstance();
@@ -266,16 +270,14 @@ class IncubationCubit extends Cubit<IncubationState> {
       }
     } else {
       // ✅ إشعار انتهاء الدورة
-      if (_userId != null) {
-        await OneSignalService.sendNotificationToUser(
-          userId: _userId!,
-          title: '🎊 اكتملت دورة الحضانة',
-          message: 'تهانينا! اكتملت دورة حضانة دودة القز بنجاح',
-          data: {
-            'type': 'cycle_complete',
-          },
-        );
-      }
+      await OneSignalService.sendNotificationToUser(
+        userId: _userId!,
+        title: '🎊 اكتملت دورة الحضانة',
+        message: 'تهانينا! اكتملت دورة حضانة دودة القز بنجاح',
+        data: {
+          'type': 'cycle_complete',
+        },
+      );
 
       emit(IncubationCompleted(cycle: updated, userData: current.userData));
       await stopCycle();
@@ -304,7 +306,10 @@ class IncubationCubit extends Cubit<IncubationState> {
     _stageMonitor.stop();
     _deviceControl.stop();
     _uiTicker.stop();
-    _feedingSchedule.stopFeedingSchedule();
+    _feedingSchedule.stopFeedingNotifications();
+    _feedingNotifications
+        .stopFeedingNotifications(); // ✅ Stop feeding notifications
+    _sensorSubscription?.cancel();
 
     // ✅ إزالة Tags من OneSignal
     await OneSignalService.setUserTags(
@@ -314,28 +319,6 @@ class IncubationCubit extends Cubit<IncubationState> {
     );
 
     emit(current.copyWith(cycle: stopped));
-  }
-
-  Future<void> _saveStageInfoToFirebase(IncubationCycle cycle) async {
-    if (_userId == null) return;
-
-    try {
-      await _firebase.saveSensorData(
-          'users/$_userId/current_stage',
-          {
-            'stage': cycle.currentStage.name,
-            'stage_arabic': cycle.currentStage.arabicName,
-            'day_in_cycle': cycle.currentStageDaysRemaining,
-            'days_remaining': cycle.currentStageDaysRemaining,
-            'feeding_percent':
-                OneSignalService.getFeedingPercentage(cycle.currentStage),
-            'updated_at': DateTime.now().toIso8601String(),
-          } as SensorData);
-
-      print('✅ تم حفظ معلومات المرحلة في Firebase');
-    } catch (e) {
-      print('❌ خطأ في حفظ معلومات المرحلة: $e');
-    }
   }
 
   // Helper methods
@@ -374,7 +357,6 @@ class IncubationCubit extends Cubit<IncubationState> {
   }
 
   UserData? get currentUser => _currentUser;
-  FeedingScheduleService get feedingSchedule => _feedingSchedule;
 
   void checkStageTransitionManually() => _onStageTransition();
 
@@ -404,6 +386,14 @@ class IncubationCubit extends Cubit<IncubationState> {
     _stageMonitor.dispose();
     _deviceControl.dispose();
     _feedingSchedule.dispose();
+    _feedingNotifications.dispose(); // ✅ Dispose feeding notifications
+    _sensorSubscription?.cancel();
+    _simulation.dispose();
     return super.close();
   }
+}
+
+class FeedingSchedule {
+  int currentFeedingCount = 0;
+  int totalFeedingsPerDay = 4;
 }

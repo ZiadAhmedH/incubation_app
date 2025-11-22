@@ -1,62 +1,56 @@
-import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../data/models/data_model.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 class OneSignalService {
   static const String appId = '6c709451-e21e-402d-9a66-f205adcfb3d8';
   static const String restApiKey =
-      'os_v2_app_nryjiupcdzac3gtg6ic23t5t3dwkrk6zqt7efnvjwpqpxckgxlevsq7p6bzjz2qvodudv72jfjcxdglzaillc5hbla3xrazihwuccwi';
+      'os_v2_app_nryjiupcdzac3gtg6ic23t5t3cem6i4j2fbeqwnkpndgfpvlq4ud7kp6dv2kunwp4le2vdbo6plirufkdkyw6e55co4yagxngfp5wli';
 
+  // Initialize OneSignal
   static Future<void> initialize() async {
     try {
-      print('🚀 بدء تهيئة OneSignal...');
-
       OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
       OneSignal.initialize(appId);
-
       await OneSignal.Notifications.requestPermission(true);
-
-      print('✅ OneSignal initialized successfully');
-
-      OneSignal.Notifications.addClickListener((event) {
-        print('🔔 تم فتح إشعار: ${event.notification.title}');
-        print('📦 البيانات: ${event.notification.additionalData}');
-      });
-
-      OneSignal.Notifications.addForegroundWillDisplayListener((event) {
-        print('📬 إشعار وارد في Foreground: ${event.notification.title}');
-      });
-
-      final subscription = OneSignal.User.pushSubscription;
-      final playerId = subscription.id;
-      final token = subscription.token;
-
-      if (playerId != null) {
-        print('🆔 OneSignal Player ID: $playerId');
-        print('📋 احفظ هذا الـ ID للاختبار!');
-      }
-      if (token != null) {
-        print('📱 FCM Token: $token');
-      }
-
-      subscription.addObserver((state) {
-        print('🔄 Subscription تغير:');
-        print('   Player ID: ${state.current.id}');
-        print('   Token: ${state.current.token}');
-      });
+      print('✅ OneSignal initialized');
     } catch (e) {
-      print('❌ خطأ في تهيئة OneSignal: $e');
+      print('❌ OneSignal initialization failed: $e');
     }
   }
 
-  static Future<void> setExternalUserId(String userId) async {
-    try {
-      await OneSignal.login(userId);
-      print('✅ تم ربط OneSignal بالمستخدم: $userId');
-    } catch (e) {
-      print('❌ خطأ في ربط المستخدم: $e');
-    }
+  // Schedules a notification for a specific time (works in killed state)
+  static Future<void> scheduleNotification({
+    required String userId,
+    required String title,
+    required String message,
+    required DateTime sendAt,
+    Map<String, dynamic>? data,
+    String androidSound =
+        'notification', // <-- default to your sound (no extension)
+    String iosSound =
+        'notification.mp3', // <-- default to your sound (with extension)
+  }) async {
+    final url = Uri.parse('https://onesignal.com/api/v1/notifications');
+    final body = {
+      'app_id': appId,
+      'include_external_user_ids': [userId],
+      'headings': {'en': title, 'ar': title},
+      'contents': {'en': message, 'ar': message},
+      'send_after': sendAt.toUtc().toIso8601String(),
+      if (data != null) 'data': data,
+      'android_sound': androidSound, // <-- add this
+      'ios_sound': iosSound, // <-- add this
+    };
+    await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Authorization': 'Basic $restApiKey',
+      },
+      body: jsonEncode(body),
+    );
   }
 
   static Future<void> setUserTags({
@@ -64,134 +58,88 @@ class OneSignalService {
     required int dayInCycle,
     required String unitId,
   }) async {
-    try {
-      await OneSignal.User.addTags({
+    final url = Uri.parse('https://onesignal.com/api/v1/apps/$appId/users/tag');
+    final body = {
+      'app_id': appId,
+      'tags': {
         'current_stage': stage,
         'day_in_cycle': dayInCycle.toString(),
         'unit_id': unitId,
         'last_update': DateTime.now().toIso8601String(),
-      });
-      print('✅ Tags محدثة: stage=$stage, day=$dayInCycle');
-    } catch (e) {
-      print('❌ خطأ في تحديث Tags: $e');
-    }
-  }
-
-  static Future<void> sendNotificationToUser({
-    required String userId,
-    required String title,
-    required String message,
-    Map<String, dynamic>? data,
-  }) async {
-    try {
-      print('📤 إرسال إشعار لـ $userId...');
-
-      final url = Uri.parse('https://onesignal.com/api/v1/notifications');
-
-      final body = {
-        'app_id': appId,
-        'include_external_user_ids': [userId],
-        'headings': {'en': title},
-        'contents': {'en': message},
-        if (data != null) 'data': data,
-      };
-
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Authorization': 'Basic $restApiKey',
-        },
-        body: jsonEncode(body),
-      );
-
-      if (response.statusCode == 200) {
-        print('✅ تم إرسال الإشعار بنجاح');
-        final responseData = jsonDecode(response.body);
-        print('📊 Recipients: ${responseData['recipients']}');
-      } else {
-        print('❌ فشل إرسال الإشعار: ${response.statusCode}');
-        print('📄 Body: ${response.body}');
       }
-    } catch (e) {
-      print('❌ خطأ في إرسال الإشعار: $e');
-    }
+    };
   }
 
-  // ✅ إرسال إشعار تغيير المرحلة
+  // Send stage change notification immediately (works in all app states)
   static Future<void> sendStageChangeNotification({
     required String userId,
     required IncubationStage oldStage,
     required IncubationStage newStage,
   }) async {
-    print('🔄 إرسال إشعار تغيير مرحلة...');
-
     final feedingPercent = getFeedingPercentage(newStage);
-
-    await sendNotificationToUser(
+    final title = '🔄 انتقال لمرحلة جديدة';
+    final message =
+        'تم الانتقال من ${oldStage.arabicName} إلى ${newStage.arabicName}\n'
+        'كمية التغذية الجديدة: $feedingPercent%';
+    final data = {
+      'type': 'stage_change',
+      'old_stage': oldStage.name,
+      'new_stage': newStage.name,
+      'feeding_percent': feedingPercent,
+    };
+    // Send immediately (no scheduling)
+    await scheduleNotification(
       userId: userId,
-      title: '🔄 انتقال لمرحلة جديدة',
-      message:
-          'تم الانتقال من ${oldStage.arabicName} إلى ${newStage.arabicName}\n'
-          'كمية التغذية الجديدة: $feedingPercent%',
-      data: {
-        'type': 'stage_change',
-        'old_stage': oldStage.name,
-        'new_stage': newStage.name,
-        'feeding_percent': feedingPercent,
-      },
-    );
-
-    
-  }
-
-  // ✅ إرسال إشعار وقت التغذية
-  static Future<void> sendFeedingNotification({
-    required String userId,
-    required int feedingNumber,
-    required IncubationStage currentStage,
-  }) async {
-    print('🍃 إرسال إشعار تغذية #$feedingNumber...');
-
-    final feedingPercent = getFeedingPercentage(currentStage);
-    final stageName = getStageName(currentStage);
-
-    await sendNotificationToUser(
-      userId: userId,
-      title: '🍃 وقت التغذية $feedingNumber/4',
-      message: 'المرحلة: $stageName\n'
-          'كمية التغذية: $feedingPercent%\n'
-          'تأكد من تقديم الغذاء لدودة القز الآن.',
-      data: {
-        'type': 'feeding',
-        'feeding_number': feedingNumber,
-        'stage': currentStage.name,
-        'feeding_percent': feedingPercent,
-      },
+      title: title,
+      message: message,
+      sendAt: DateTime.now(),
+      data: data,
     );
   }
 
-  // ✅ إرسال إشعارات التغذية اليومية (4 مرات)
-  static Future<void> scheduleDailyFeedingNotifications({
+  /// Link OneSignal notifications to a specific user
+  static Future<void> setExternalUserId(String userId) async {
+    try {
+      await OneSignal.login(userId);
+      print('✅ تم ربط OneSignal بالمستخدم: $userId');
+    } catch (e) {
+      print('❌ خطأ في ربط المستخدم بـ OneSignal: $e');
+    }
+  }
+
+  /// Send an immediate notification to a user (works in all app states)
+  static Future<void> sendNotificationToUser({
     required String userId,
-    required IncubationStage currentStage,
+    required String title,
+    required String message,
+    Map<String, dynamic>? data,
+    String androidSound =
+        'notification', // <-- default to your sound (no extension)
+    String iosSound =
+        'notification.mp3', // <-- default to your sound (with extension)
   }) async {
-    print('📅 جدولة إشعارات التغذية اليومية...');
-
-    // في الواقع، الجدولة تتم من OneSignal Dashboard
-    // لكن يمكن إرسال إشعار فوري للاختبار
-
-    await sendFeedingNotification(
-      userId: userId,
-      feedingNumber: 1,
-      currentStage: currentStage,
+    final url = Uri.parse('https://onesignal.com/api/v1/notifications');
+    final body = {
+      'app_id': appId,
+      'include_external_user_ids': [userId],
+      'headings': {'en': title, 'ar': title},
+      'contents': {'en': message, 'ar': message},
+      if (data != null) 'data': data,
+      'android_sound': androidSound, // <-- add this
+      'ios_sound': iosSound, // <-- add this
+    };
+    await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Authorization': 'Basic $restApiKey',
+      },
+      body: jsonEncode(body),
     );
   }
 
   static int getFeedingPercentage(IncubationStage stage) {
     switch (stage) {
-      case IncubationStage.eggIncubation:
-        return 0;
       case IncubationStage.larvaStage1:
         return 20;
       case IncubationStage.larvaStage2:
@@ -211,5 +159,66 @@ class OneSignalService {
 
   static String getStageName(IncubationStage stage) {
     return stage.arabicName;
+  }
+
+  // You can add this to your Cubit or as a helper in OneSignalService
+
+  static Future<void> scheduleFullCycleFeedings({
+    required String userId,
+    required IncubationStage currentStage,
+    int days = 44,
+  }) async {
+    final feedingPercent = OneSignalService.getFeedingPercentage(currentStage);
+    final stageName = OneSignalService.getStageName(currentStage);
+    final now = DateTime.now();
+
+    for (int day = 0; day < days; day++) {
+      final baseTime = now.add(Duration(minutes: day));
+      for (int i = 0; i < 4; i++) {
+        final scheduledTime = baseTime.add(Duration(seconds: i * 15));
+        await OneSignalService.scheduleNotification(
+          userId: userId,
+          title: '🍃 وقت التغذية ${i + 1}/4',
+          message: 'اليوم ${day + 1} - المرحلة: $stageName\n'
+              'كمية التغذية: $feedingPercent%\n'
+              'تأكد من تقديم الغذاء لدودة القز الآن.',
+          sendAt: scheduledTime,
+          data: {
+            'type': 'feeding',
+            'feeding_number': i + 1,
+            'stage': currentStage.name,
+            'feeding_percent': feedingPercent,
+            'simulated_day': day + 1,
+          },
+        );
+      }
+    }
+    print('✅ تم جدولة إشعارات التغذية لـ $days يوم (دقيقة) قادمة');
+  }
+
+  static Future<void> scheduleAllStageTransitionNotifications({
+    required String userId,
+    required List<StageConfig> stages,
+    required DateTime cycleStart,
+  }) async {
+    DateTime baseTime = cycleStart;
+    for (final stage in stages) {
+      final title = '🔄 انتقال لمرحلة جديدة';
+      final message = 'بدأت المرحلة: ${stage.stage.arabicName}';
+
+      await OneSignalService.scheduleNotification(
+        userId: userId,
+        title: title,
+        message: message,
+        sendAt: baseTime,
+        data: {
+          'type': 'stage_change',
+          'stage': stage.stage.name,
+        },
+      );
+
+      baseTime = baseTime.add(Duration(minutes: stage.durationDays));
+    }
+    print('✅ تم جدولة إشعارات انتقال المراحل لجميع المراحل');
   }
 }

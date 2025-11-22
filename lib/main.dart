@@ -7,7 +7,6 @@ import 'presentation/screens/home-sceen.dart';
 import 'presentation/screens/register_screen.dart';
 import 'services/oneSignal_serveice.dart';
 import 'services/local_notification_service.dart';
-import 'services/push_notification_service.dart';
 import 'services/notification_scheduler.dart';
 import 'presentation/cubit/incubation_cubit.dart';
 import 'presentation/cubit/incubation_state.dart';
@@ -31,8 +30,7 @@ void main() async {
   // Initialize Services
   try {
     await Future.wait([
-      OneSignalService.initialize(), // ✅
-      PushNotificationService.initialize(),
+      OneSignalService.initialize(),
       LocalNotificationService.init(),
       NotificationScheduler.init(),
     ]);
@@ -52,7 +50,7 @@ class MyApp extends StatelessWidget {
     return BlocProvider(
       create: (_) => getIt<IncubationCubit>(),
       child: MaterialApp(
-        title: 'حضانة دودة القز',
+        title: 'Bombyx Care',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primaryColor: const Color(0xFF1B4332),
@@ -72,8 +70,9 @@ class AppNavigator extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<IncubationCubit, IncubationState>(
       builder: (context, state) {
+        Widget child;
         if (state is IncubationInitial) {
-          return const Scaffold(
+          child = const Scaffold(
             backgroundColor: Color(0xFF1B4332),
             body: Center(
               child: CircularProgressIndicator(
@@ -81,13 +80,18 @@ class AppNavigator extends StatelessWidget {
               ),
             ),
           );
+        } else if (state is IncubationNoCycle) {
+          child = const RegistrationScreen();
+        } else {
+          child = const HomeScreen();
         }
-
-        if (state is IncubationNoCycle) {
-          return const RegistrationScreen();
-        }
-
-        return const HomeScreen();
+        // Fade transition for navigation
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 700),
+          switchInCurve: Curves.easeInOut,
+          switchOutCurve: Curves.easeInOut,
+          child: child,
+        );
       },
     );
   }

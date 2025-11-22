@@ -28,3 +28,9 @@ class DeviceControlService {
 
   void dispose() => stop();
 }
+
+extension SimulationServiceDeviceControl on SimulationService {
+  void updateDeviceControl({required bool fan, required bool heater}) {
+    // TODO: implement actual logic to apply fan and heater states
+  }
+}

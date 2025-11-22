@@ -3,6 +3,8 @@ import 'package:incubation_app/data/models/data_model.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:incubation_app/presentation/cubit/incubation_cubit.dart';
 
+import '../presentation/screens/register_screen.dart';
+
 class CompletedView extends StatelessWidget {
   final IncubationCycle cycle;
   final UserData userData;
@@ -35,7 +37,21 @@ class CompletedView extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: () => context.read<IncubationCubit>().startNewCycle(),
+            onPressed: () {
+              // Navigate to RegisteredScreen
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => BlocProvider.value(
+                    value: context.read<IncubationCubit>(),
+                    child: RegistrationScreen(),
+                  ),
+                ),
+              );
+
+              // clear all data
+
+
+            },
             icon: const Icon(Icons.refresh),
             label: const Text('بدء دورة جديدة'),
             style: ElevatedButton.styleFrom(

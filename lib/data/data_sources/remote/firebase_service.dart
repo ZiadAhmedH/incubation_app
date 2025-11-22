@@ -1,63 +1,71 @@
+import 'dart:async';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:incubation_app/data/models/data_model.dart';
-
+import '../../models/data_model.dart';
 
 class FirebaseService {
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
+  StreamSubscription<DatabaseEvent>? _sensorSubscription;
 
-  // حفظ بيانات المستخدم
-  Future<void> saveUserData(String userId, UserData userData) async {
-    try {
-      await _database.child('users/$userId').set(userData.toJson());
-    } catch (e) {
-      throw Exception('فشل في حفظ بيانات المستخدم: $e');
-    }
-  }
+  /// Stream sensor data from Firebase
+  Stream<SensorData> streamSensorData(String unitId) {
+    final controller = StreamController<SensorData>();
 
-  // استرجاع بيانات المستخدم
-  Future<UserData?> getUserData(String userId) async {
-    try {
-      final snapshot = await _database.child('users/$userId').get();
-      if (snapshot.value != null) {
-        return UserData.fromJson(
-          Map<String, dynamic>.from(snapshot.value as Map),
-        );
+    _sensorSubscription =
+        _database.child('$unitId/sensorData').onValue.listen((event) {
+      try {
+        final data = event.snapshot.value as Map<dynamic, dynamic>?;
+
+        if (data != null) {
+          final sensorData = SensorData(
+            temperature: (data['temperature'] as num).toDouble(),
+            humidity: (data['humidity'] as num).toDouble(),
+            fanOn: data['fan'] as bool? ?? false,
+            heaterOn: data['heater'] as bool? ?? false,
+            timestamp: DateTime.parse(data['timestamp'] as String),
+          );
+
+          controller.add(sensorData);
+        }
+      } catch (e) {
+        print('❌ Error parsing sensor data: $e');
+        controller.addError(e);
       }
-      return null;
-    } catch (e) {
-      throw Exception('فشل في جلب بيانات المستخدم: $e');
-    }
+    });
+
+    return controller.stream;
   }
 
-  // حفظ بيانات الحساسات
-  Future<void> saveSensorData(String unitId, SensorData data) async {
+  /// Get history data
+  Future<List<SensorData>> getHistoryData(String unitId,
+      {int limit = 100}) async {
     try {
-      await _database.child('units/$unitId/sensorData').set({
-        'temperature': data.temperature,
-        'humidity': data.humidity,
-        'fan': data.fanOn,
-        'heater': data.heaterOn,
-        'timestamp': data.timestamp.toIso8601String(),
-      });
+      final snapshot = await _database
+          .child('units/$unitId/history')
+          .orderByKey()
+          .limitToLast(limit)
+          .get();
+
+      if (snapshot.exists) {
+        final data = snapshot.value as Map<dynamic, dynamic>;
+        return data.entries.map((entry) {
+          final item = entry.value as Map<dynamic, dynamic>;
+          return SensorData(
+            temperature: (item['temperature'] as num).toDouble(),
+            humidity: (item['humidity'] as num).toDouble(),
+            fanOn: item['fan'] as bool? ?? false,
+            heaterOn: item['heater'] as bool? ?? false,
+            timestamp: DateTime.parse(item['timestamp'] as String),
+          );
+        }).toList();
+      }
+      return [];
     } catch (e) {
-      throw Exception('فشل في حفظ بيانات الحساسات: $e');
+      print('❌ Error fetching history: $e');
+      return [];
     }
   }
 
-  // حفظ سجل القراءات
-  Future<void> saveReadingHistory(String unitId, SensorData data) async {
-    try {
-      await _database.child('units/$unitId/history').push().set({
-        'temperature': data.temperature,
-        'humidity': data.humidity,
-        'timestamp': data.timestamp.toIso8601String(),
-      });
-    } catch (e) {
-      throw Exception('فشل في حفظ سجل القراءات: $e');
-    }
-  }
-
-  // مراقبة بيانات التحكم
+  /// Watch device control changes
   Stream<Map<String, dynamic>?> watchDeviceControl(String unitId) {
     return _database.child('units/$unitId/control').onValue.map((event) {
       if (event.snapshot.value != null) {
@@ -67,7 +75,7 @@ class FirebaseService {
     });
   }
 
-  // تحديث التحكم في الأجهزة
+  /// Update device control (fan/heater)
   Future<void> updateDeviceControl(String unitId, bool fan, bool heater) async {
     try {
       await _database.child('units/$unitId/control').set({
@@ -80,7 +88,7 @@ class FirebaseService {
     }
   }
 
-  // حفظ دورة الحضانة مع بيانات المستخدم
+  /// Save incubation cycle
   Future<void> saveIncubationCycle(String userId, IncubationCycle cycle) async {
     try {
       await _database.child('users/$userId/currentCycle').set({
@@ -92,7 +100,7 @@ class FirebaseService {
         'isActive': cycle.isActive,
       });
 
-      // حفظ نسخة في cycles للأرشفة
+      // Save copy in cycles for archiving
       await _database.child('cycles/${cycle.id}').set({
         'userId': userId,
         'id': cycle.id,
@@ -107,15 +115,15 @@ class FirebaseService {
     }
   }
 
-  // استرجاع الدورة الحالية للمستخدم
+  /// Get current cycle for user
   Future<IncubationCycle?> getCurrentCycle(
     String userId,
     List<StageConfig> stages,
   ) async {
     try {
-      final snapshot = await _database
-          .child('users/$userId/currentCycle')
-          .get();
+      final snapshot =
+          await _database.child('users/$userId/currentCycle').get();
+
       if (snapshot.value != null) {
         final data = Map<String, dynamic>.from(snapshot.value as Map);
         return IncubationCycle(
@@ -136,7 +144,7 @@ class FirebaseService {
     }
   }
 
-  // حفظ سجل تغيير المراحل
+  /// Save stage transition history
   Future<void> saveStageTransition(
     String userId,
     IncubationStage fromStage,
@@ -153,13 +161,11 @@ class FirebaseService {
     }
   }
 
-  // تنظيف القراءات القديمة
+  /// Clean old readings (keep only last N readings)
   Future<void> cleanOldReadings(String unitId, {int keepLast = 100}) async {
     try {
-      final snapshot = await _database
-          .child('units/$unitId/history')
-          .orderByKey()
-          .get();
+      final snapshot =
+          await _database.child('units/$unitId/history').orderByKey().get();
 
       if (snapshot.value != null) {
         final data = Map<String, dynamic>.from(snapshot.value as Map);
@@ -178,5 +184,34 @@ class FirebaseService {
     } catch (e) {
       throw Exception('فشل في تنظيف القراءات القديمة: $e');
     }
+  }
+
+  /// Save user data
+  Future<void> saveUserData(String userId, UserData userData) async {
+    try {
+      await _database.child('users/$userId').set(userData.toJson());
+    } catch (e) {
+      throw Exception('فشل في حفظ بيانات المستخدم: $e');
+    }
+  }
+
+  /// Get user data
+  Future<UserData?> getUserData(String userId) async {
+    try {
+      final snapshot = await _database.child('users/$userId').get();
+      if (snapshot.value != null) {
+        return UserData.fromJson(
+          Map<String, dynamic>.from(snapshot.value as Map),
+        );
+      }
+      return null;
+    } catch (e) {
+      throw Exception('فشل في جلب بيانات المستخدم: $e');
+    }
+  }
+
+  /// Dispose resources
+  void dispose() {
+    _sensorSubscription?.cancel();
   }
 }

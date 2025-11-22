@@ -53,21 +53,42 @@ class CycleInfoCard extends StatelessWidget {
           ),
           _infoRow('الأيام المتبقية', '${cycle.daysRemaining}'),
           const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: (cycle.progress / 100).clamp(0, 1),
-              minHeight: 10,
-              backgroundColor: const Color(0xFF40916C),
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFFFFB800),
-              ),
+          // --- Animated Progress Bar ---
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(
+              begin: 0,
+              end: (cycle.progress / 100).clamp(0, 1),
             ),
+            duration: const Duration(milliseconds: 900),
+            curve: Curves.easeInOut,
+            builder: (context, value, child) {
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: value,
+                  minHeight: 10,
+                  backgroundColor: const Color(0xFF40916C),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFFFFB800),
+                  ),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 8),
-          Text(
-            'التقدم: ${cycle.progress.toStringAsFixed(1)}%',
-            style: TextStyle(color: Colors.white.withOpacity(0.85)),
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(
+              begin: 0,
+              end: cycle.progress,
+            ),
+            duration: const Duration(milliseconds: 900),
+            curve: Curves.easeInOut,
+            builder: (context, value, child) {
+              return Text(
+                'التقدم: ${value.toStringAsFixed(1)}%',
+                style: TextStyle(color: Colors.white.withOpacity(0.85)),
+              );
+            },
           ),
         ],
       ),
@@ -75,19 +96,19 @@ class CycleInfoCard extends StatelessWidget {
   }
 
   Widget _infoRow(String label, String value) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(color: Colors.white.withOpacity(0.8))),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: TextStyle(color: Colors.white.withOpacity(0.8))),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 }

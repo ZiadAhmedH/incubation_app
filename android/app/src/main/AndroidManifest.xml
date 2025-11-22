@@ -18,7 +18,7 @@
     </queries>
 
     <application
-        android:label="incubation_app"
+        android:label="Bombyx Care"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

@@ -60,16 +60,8 @@ class IncubationRepository {
     }
   }
 
-  // Sensor operations
-  Future<void> saveSensorData(String unitId, SensorData data) async {
-    try {
-      await _firebase.saveSensorData(unitId, data);
-      await _firebase.saveReadingHistory(unitId, data);
-    } catch (e) {
-      print('Firebase save sensor failed: $e');
-    }
-  }
-
+  // Sensor operations - Now handled by ESP32Simulator pushing to Firebase
+  // Repository only needs to clean old readings
   Future<void> cleanOldReadings(String unitId) async {
     try {
       await _firebase.cleanOldReadings(unitId);
@@ -78,6 +70,7 @@ class IncubationRepository {
     }
   }
 
+  // Device control operations
   Future<void> updateDeviceControl(String unitId, bool fan, bool heater) async {
     try {
       await _firebase.updateDeviceControl(unitId, fan, heater);
@@ -88,4 +81,12 @@ class IncubationRepository {
 
   Stream<Map<String, dynamic>?> watchDeviceControl(String unitId) =>
       _firebase.watchDeviceControl(unitId);
+
+  // Stream sensor data from Firebase
+  Stream<SensorData> streamSensorData(String unitId) =>
+      _firebase.streamSensorData(unitId);
+
+  // Get history data
+  Future<List<SensorData>> getHistoryData(String unitId, {int limit = 100}) =>
+      _firebase.getHistoryData(unitId, limit: limit);
 }
